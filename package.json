@@ -1,0 +1,22 @@
+{
+  "name": "telwallet",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.8",
+    "ethers": "^5.7.2",
+    "mongoose": "^8.3.1",
+    "nodemon": "^3.1.0",
+    "qrcode": "^1.5.3",
+    "telegraf": "^4.16.3"
+  }
+}
