@@ -9,9 +9,22 @@ const bot = new Telegraf('7190257079:AAGPN69Y9q9irb4Dx6l-G4yOudDck21W97c');
 // const provider = new ethers.providers.JsonRpcProvider('https://rpc-mumbai.polygon.technology/');
 const provider = new ethers.providers.JsonRpcProvider('https://bsc-testnet-rpc.publicnode.com');
 
+const chainData = [
+    {
+        name: 'Amoy',
+        rpcUrl: 'https://rpc-amoy.polygon.technology/'
+    },
+    {
+        name: 'tBNB',
+        rpcUrl: 'https://bsc-testnet-rpc.publicnode.com'
+    },
+]
+const chainName = '';
+let testnet = true;
+
 async function connectDB() {
     try {
-        await mongoose.connect('mongodb://localhost:27017/teleWallet', {
+        await mongoose.connect('mongodb+srv://cryptoWallet:Harsh%40CW@cluster0.y5gcbd1.mongodb.net/walletDB', {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         });
@@ -55,58 +68,123 @@ const User = mongoose.model('User', userSchema);
 
 const pendingTransactions = {};
 
-
-const funnyNames = ['SillySquid', 'WackyWalrus', 'GoofyGiraffe', 'CheekyChinchilla', 'JollyJellyfish'];
-
-function generateFunnyName() {
-    const randomIndex = Math.floor(Math.random() * funnyNames.length);
-    return funnyNames[randomIndex];
-}
+const TestChainList = ['Amoy', 'BNB', 'Sepolia_Eth', 'Goerli_Eth']
+const MainChainList = ['ETH', 'BNB', 'Polygon']
 
 function getMainMenu() {
-    return Markup.inlineKeyboard([
-        [
-            Markup.button.callback(' 🚀 Create Acc ', 'create_account'),
-            Markup.button.callback(' 💵 Deposit TBNB ', 'deposit'),
-        ],
-        [
-            Markup.button.callback(' 💰 Chaeck Balance ', 'check_balance'),
-            Markup.button.callback(' 💸 Send TBNB ', 'send_TBNB'),
-            Markup.button.callback(' 🪙 ETH Pice', 'ethereum_price'),
-        ],
-        [
-            Markup.button.callback(' ⚙️ Setting', 'setting'),
-            Markup.button.callback(' 📝 View Transactions', 'view_transactions'),
-            // Markup.button.callback(' 😟 Quit ', 'quit'),
-        ]
-    ]);
+    if (testnet) {
+        return Markup.inlineKeyboard([
+            [
+                Markup.button.callback(' 🚀 Create Account', 'create_account'),
+                Markup.button.callback(' 💵 Deposit Token', 'deposit'),
+            ],
+            [
+                Markup.button.callback(' ✅ testnet', 'testnetOn'),
+                Markup.button.callback('  mainnet', 'mainetOn'),
+            ],
+            [
+                Markup.button.callback(' 💰 Check Balance', 'check_balance'),
+                Markup.button.callback(' 💸 Send Token', 'send_TBNB'),
+            ],
+            [
+                Markup.button.callback(' 🔗 Show all Chain ', 'allChains'),
+                Markup.button.callback(' 🪙 ETH Pice', 'ethereum_price'),
+            ],
+            [
+                Markup.button.callback(' 📝 View Transactions', 'view_transactions'),
+                Markup.button.callback(' ⚙️ Setting', 'setting'),
+            ],
+        ]);
+    } else {
+        return Markup.inlineKeyboard([
+            [
+                Markup.button.callback(' 🚀 Create Account', 'create_account'),
+                Markup.button.callback(' 💵 Deposit Token', 'deposit'),
+            ],
+            [
+                Markup.button.callback('  testnet', 'testnetOn'),
+                Markup.button.callback(' ✅ mainnet', 'mainetOn'),
+            ],
+            [
+                Markup.button.callback(' 💰 Check Balance', 'check_balance'),
+                Markup.button.callback(' 💸 Send Token', 'send_TBNB'),
+            ],
+            [
+                Markup.button.callback(' 🔗 Show all Chain ', 'allChains'),
+                Markup.button.callback(' 🪙 ETH Pice', 'ethereum_price'),
+            ],
+            [
+                Markup.button.callback(' 📝 View Transactions', 'view_transactions'),
+                Markup.button.callback(' ⚙️ Setting', 'setting'),
+            ],
+        ]);
+
+    }
 }
 
 bot.start(async (ctx) => {
-    const telegramId = ctx.from.id.toString();
-    const username = ctx.from.username;
+    try {
+        const telegramId = ctx.from.id.toString();
+        const username = ctx.from.username;
 
-    // Check if the user already exists
-    const userExists = await User.findOne({ telegramId });
-    if (!userExists) {
-        // Create a new user if not exists
-        const newUser = new User({ telegramId, username });
-        await newUser.save();
-        ctx.reply(`Welcome 👋 , ${username} How can I assist you?`, getMainMenu());
-    } else {
-        ctx.reply(`Welcome back 👋, ${username} How can I assist you today?`, getMainMenu());
+        // Check if the user already exists
+        const userExists = await User.findOne({ telegramId });
+        if (!userExists) {
+            const newUser = new User({ telegramId, username });
+            await newUser.save();
+            await ctx.reply(`Welcome 👋, ${username}! How can I assist you?`, getMainMenu());
+        } else {
+            await ctx.reply(`Welcome back 👋, ${username}! How can I assist you today?`, getMainMenu());
+        }
+    } catch (error) {
+        console.error('Error handling bot start:', error);
+        ctx.reply('Failed to start the bot. Please try again later.');
     }
 });
 
 
-bot.use(session());
 
-bot.command('testsession', (ctx) => {
-    if (!ctx.session.counter) ctx.session.counter = 0;
-    ctx.session.counter++;
-    ctx.reply(`Counter is ${ctx.session.counter}`);
+bot.action('mainetOn', async (ctx) => {
+    testnet = false;
+
+    // Delete the previous message
+    try {
+        await ctx.deleteMessage(ctx.callbackQuery.message.message_id);
+    } catch (error) {
+        console.error('Error deleting message:', error);
+    }
+
+    // Send the updated main menu
+    ctx.reply(' ⚠️ Mainnet activated.', getMainMenu(testnet));
+});
+bot.action('testnetOn', async (ctx) => {
+    testnet = true;
+
+    // Delete the previous message
+    try {
+        await ctx.deleteMessage(ctx.callbackQuery.message.message_id);
+    } catch (error) {
+        console.error('Error deleting message:', error);
+    }
+
+    // Send the updated main menu
+    ctx.reply(' ✅ Testnet activated.', getMainMenu(testnet));
 });
 
+bot.action('testnets', async (ctx) => {
+    if (!ChainList) {
+        await ctx.reply("No chain Avalabale.");
+        return;
+    }
+
+    // Generate inline keyboard buttons for each account
+    const accountButtons = ChainList.map((name, index) => [
+        Markup.button.callback(`${name}`, `deposit_${index}`)
+    ]);
+
+    // Send a message with the accounts listed
+    await ctx.reply('Select chain to deposit into:', Markup.inlineKeyboard(accountButtons));
+});
 
 bot.action('deposit', async (ctx) => {
     const telegramId = ctx.from.id.toString();
@@ -124,6 +202,25 @@ bot.action('deposit', async (ctx) => {
 
     // Send a message with the accounts listed
     await ctx.reply('Select an account to deposit into:', Markup.inlineKeyboard(accountButtons));
+});
+
+bot.action('allChains', async (ctx) => {
+    const telegramId = ctx.from.id.toString();
+
+    if (testnet) {
+        const accountButtons = TestChainList.map((name, index) => [
+            Markup.button.callback(`${name}`, `deposit_${index}`)
+        ]);
+        await ctx.reply('Select an chian to deposit into:', Markup.inlineKeyboard(accountButtons));
+    }else{
+        const accountButtons = MainChainList.map((name, index) => [
+            Markup.button.callback(`${name}`, `deposit_${index}`)
+        ]);
+        await ctx.reply('Select an chian to deposit into:', Markup.inlineKeyboard(accountButtons));
+    }
+
+
+    // Send a message with the accounts listed
 });
 
 bot.action(/^deposit_\d+$/, async (ctx) => {
@@ -181,7 +278,8 @@ bot.action('create_account', async (ctx) => {
     const wallet = ethers.Wallet.createRandom();
     const address = wallet.address;
     const privateKey = wallet.privateKey;
-    const accountName = generateFunnyName();
+    // const accountName = generateFunnyName();
+    const accountName = `Account${((user.accounts).length) + 1}`;
     console.log("Acc Name ==> ", accountName);
     user.accounts.push({ name: accountName, address, privateKey });
     await user.save();
@@ -231,7 +329,7 @@ bot.command('sendto', async (ctx) => {
             telegramId: ctx.from.id.toString(),
             receiverAddress,
             amount,
-            transactionHash:"not get..",
+            transactionHash: "not get..",
         });
         await newTransaction.save();
 
@@ -345,7 +443,7 @@ bot.action(/^confirm_transaction_(\d+)_(\w+)$/, async (ctx) => {
 
         transaction.transactionHash = txResponse.hash;
         transaction.status = 'confirmed';
-        
+
         const account = user.accounts[index];
         account.transactions.push(transaction);
 
@@ -368,12 +466,12 @@ bot.action('cancel_transaction', async (ctx) => {
         const { userId } = ctx.match;
         // Assuming you have the transaction ID stored somewhere
         const transaction = await Transaction.findByIdAndDelete(userId);
-        
+
         if (!transaction) {
             ctx.reply('Transaction not found.');
             return;
         }
-        
+
         ctx.reply('Transaction canceled. ❌');
     } catch (error) {
         console.error('Error canceling transaction:', error);
@@ -395,8 +493,8 @@ bot.action('view_transactions', async (ctx) => {
         return;
     }
 
-    const accountButtons = user.accounts.map((account, index) =>
-        Markup.button.callback(`${account.name}: ${account.address}`, `show_transactions_${index}`)
+    const accountButtons = user.accounts.map((account, index) => [
+        Markup.button.callback(`${account.name}: ${account.address}`, `show_transactions_${index}`)]
     );
 
     ctx.reply('Select an account to view transactions:', Markup.inlineKeyboard(accountButtons));
@@ -416,7 +514,7 @@ bot.action(/^show_transactions_\d+$/, async (ctx) => {
     }
 
     const selectedAccount = user.accounts[index];
-    console.log("Selected ts ==> ",selectedAccount , index);
+    console.log("Selected ts ==> ", selectedAccount, index);
     let message = `Confirmed Transactions for ${selectedAccount.name}:\n`;
 
     // Filter out only the confirmed transactions
@@ -465,7 +563,44 @@ bot.action('check_balance', async (ctx) => {
 });
 
 bot.action(/^balance_\d+$/, async (ctx) => {
-    const index = parseInt(ctx.match[0].split('_')[1]);
+    // const index = parseInt(ctx.match[0].split('_')[1]);
+    // const telegramId = ctx.from.id.toString();
+
+    // const user = await User.findOne({ telegramId });
+    // if (!user || index >= user.accounts.length) {
+    //     await ctx.reply("Invalid account selected.");
+    //     return;
+    // }
+
+    // const selectedAccount = user.accounts[index];
+    // const addr = selectedAccount.address;
+
+    // if (testnet) {
+    //     const accountButtons = TestChainList.map((name, index) => [
+    //         Markup.button.callback(`${name}`, `showBalance_${name}_${selectedAccount}`)
+    //     ]);
+    //     await ctx.reply(`Account  ${selectedAccount.name} :`, Markup.inlineKeyboard(accountButtons));
+    // }else{
+    //     const accountButtons = MainChainList.map((name, index) => [
+    //         Markup.button.callback(`${name}`, `showBalance_${name}_${selectedAccount}`)
+    //     ]);
+    //     await ctx.reply(`Account  ${selectedAccount.name} :`, Markup.inlineKeyboard(accountButtons));
+    // }
+
+    // console.log("Selectred account ==> ", selectedAccount.address);
+    // console.log("Selectred account ==> ", selectedAccount.privateKey);
+    // const senderPrivateKey = selectedAccount.privateKey;
+    // const wallet = new ethers.Wallet(senderPrivateKey, provider);
+
+    // const balance = await wallet.getBalance();
+    // const bal = ethers.utils.formatEther(balance)
+
+    // await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}*:\n${bal} TBNB`);
+});
+
+bot.action(/^showBalance_(\d+)_()$/, async (ctx) => {
+    const chainName = (ctx.match[0].split('_')[1]).toString();
+    const accountAddress = (ctx.match[0].split('_')[2]).toString();
     const telegramId = ctx.from.id.toString();
 
     const user = await User.findOne({ telegramId });
@@ -474,21 +609,14 @@ bot.action(/^balance_\d+$/, async (ctx) => {
         return;
     }
 
-    const selectedAccount = user.accounts[index];
-
-    // Here you would fetch the real balance from the blockchain
-    // For demonstration, we're using the stored balance
-    // const balance = selectedAccount.balance;
-    const addr = selectedAccount.address;
+    const addr = accountAddress.address;
     console.log("Selectred account ==> ", selectedAccount.address);
     console.log("Selectred account ==> ", selectedAccount.privateKey);
-    // const senderPrivateKey = 'f8610ba275562cbc18233acbc6b0769c943c027ef50610002633de5814e1174d'; 
     const senderPrivateKey = selectedAccount.privateKey;
     const wallet = new ethers.Wallet(senderPrivateKey, provider);
 
     const balance = await wallet.getBalance();
     const bal = ethers.utils.formatEther(balance)
-    // console.log("Ba;ance ==> " , bal);
 
     await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}*:\n${bal} TBNB`);
 });
@@ -498,439 +626,4 @@ bot.action(/^balance_\d+$/, async (ctx) => {
 
 bot.launch()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// bot.command('sendto', async (ctx) => {
-//     const parts = ctx.message.text.split(' ');
-//     if (parts.length !== 3) {
-//         ctx.reply('Usage: /sendto [receiver_address] [amount]');
-//         return;
-//     }
-
-//     const receiverAddress = parts[1];
-//     const amount = parseFloat(parts[2]);
-
-//     // Validate the receiver's Ethereum address
-//     if (!ethers.utils.isAddress(receiverAddress)) {
-//         ctx.reply('Invalid Ethereum address. Please enter a valid address.');
-//         return;
-//     }
-
-//     // Validate the amount
-//     if (isNaN(amount) || amount <= 0) {
-//         ctx.reply('Invalid amount. Please enter a valid number greater than zero.');
-//         return;
-//     }
-
-//     // Retrieve user data and prompt to select an account
-//     const telegramId = ctx.from.id.toString();
-//     const user = await User.findOne({ telegramId });
-
-//     if (!user || user.accounts.length === 0) {
-//         ctx.reply("You don't have any accounts yet. Use /create_account to create one.");
-//         return;
-//     }
-
-//     const accountButtons = user.accounts.map((account, index) =>
-//         Markup.button.callback(`${account.name}: ${account.address}`, `select_account_${index}`)
-//     );
-
-//     ctx.reply('Select an account to send from:', Markup.inlineKeyboard(accountButtons));
-// });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// Extended sendTBNB command with interactive confirmation
-// bot.command('sendTBNB', async (ctx) => {
-//     const parts = ctx.message.text.split(' ');
-//     if (parts.length < 3) {
-//         ctx.reply('Usage: /sendTBNB <receiver_address> <amount>');
-//         return;
-//     }
-//     const receiverAddress = parts[1];
-//     const amount = parseFloat(parts[2]);
-//     const userId = ctx.from.id.toString();
-
-//     if (!ethers.utils.isAddress(receiverAddress) || isNaN(amount) || amount <= 0) {
-//         ctx.reply('Invalid receiver address or amount. Please check your input and try again.');
-//         return;
-//     }
-
-//     const user = await User.findOne({ telegramId: userId });
-//     if (!user || user.accounts.length === 0) {
-//         ctx.reply("You don't have any accounts yet. Use /create_account to create one.");
-//         return;
-//     }
-
-//     const senderAccount = user.accounts[0]; // Assuming using the first account
-//     const wallet = new ethers.Wallet(senderAccount.privateKey, provider);
-
-//     try {
-//         const dummyTransaction = {
-//             to: receiverAddress,
-//             value: ethers.utils.parseEther(amount.toString()),
-//         };
-
-//         const estimatedGasLimit = await provider.estimateGas(dummyTransaction);
-//         const gasPrice = await provider.getGasPrice();
-//         const estimatedFee = estimatedGasLimit.mul(gasPrice);
-//         const balance = await wallet.getBalance();
-
-//         if (balance.sub(estimatedFee).lt(ethers.utils.parseEther(amount.toString()))) {
-//             ctx.reply('Insufficient balance to cover the transfer amount and network fee. Transaction canceled. ❌');
-//             return;
-//         }
-
-//         // Store transaction details using userId as key
-//         pendingTransactions[userId] = {
-//             receiverAddress,
-//             amount,
-//             gasLimit: estimatedGasLimit,
-//             gasPrice,
-//             estimatedFee
-//         };
-
-//         ctx.reply(`Confirm sending ${amount} TBNB to ${receiverAddress}.\nEstimated network fee: ${ethers.utils.formatEther(estimatedFee)} TBNB`, Markup.inlineKeyboard([
-//             Markup.button.callback('Yes', `confirm_send_${userId}`),
-//             Markup.button.callback('No', `cancel_send_${userId}`)
-//         ]));
-//     } catch (error) {
-//         console.error('Error preparing transaction:', error);
-//         ctx.reply('Failed to prepare the transaction. Please try again later.');
-//     }
-// });
-
-// bot.action(/^confirm_send_(\d+)$/, async (ctx) => {
-//     const userId = ctx.match[1];
-//     const transaction = pendingTransactions[userId];
-
-//     if (!transaction) {
-//         await ctx.reply('Transaction details not found. 😟');
-//         return;
-//     }
-
-//     const { receiverAddress, amount, gasLimit, gasPrice, estimatedFee } = transaction;
-//     const senderAccount = (await User.findOne({ telegramId: userId })).accounts[0]; // Assuming the first account
-//     const wallet = new ethers.Wallet(senderAccount.privateKey, provider);
-
-//     try {
-//         const balance = await wallet.getBalance();
-
-//         if (balance.sub(estimatedFee).lt(ethers.utils.parseEther(amount.toString()))) {
-//             ctx.reply('Insufficient balance to cover the transfer amount and network fee after gas cost estimation. Transaction canceled. ❌');
-//             delete pendingTransactions[userId]; // Clean up
-//             return;
-//         }
-
-//         const tx = {
-//             to: receiverAddress,
-//             value: ethers.utils.parseEther(amount.toString()),
-//             gasLimit,
-//             gasPrice
-//         };
-
-//         const txResponse = await wallet.sendTransaction(tx);
-//         ctx.reply(`Transaction successful! ✅🥳 [${txResponse.hash}](https://bscscan.com/tx/${txResponse.hash})`, { parse_mode: 'Markdown' });
-
-//         // Optionally save transaction to the database here if needed
-
-//         delete pendingTransactions[userId]; // Clean up after transaction
-//     } catch (error) {
-//         console.error('Error during transaction:', error);
-//         ctx.reply('Failed to complete transaction. Please try again.');
-//     }
-// });
-
-// bot.action(/^cancel_send_(\d+)$/, (ctx) => {
-//     const userId = ctx.match[1];
-//     delete pendingTransactions[userId];
-//     ctx.reply('Transaction canceled. ❌');
-// });
-
-
-// bot.action(/^balance_\d+$/, async (ctx) => {
-//     const index = parseInt(ctx.match[0].split('_')[1]);
-//     const telegramId = ctx.from.id.toString();
-//     const user = await User.findOne({ telegramId }).populate('accounts.transactions');
-
-//     if (!user || index >= user.accounts.length) {
-//         ctx.reply("Invalid account selected.");
-//         return;
-//     }
-
-//     const selectedAccount = user.accounts[index];
-//     console.log("Selectred Acc ==> " , selectedAccount);
-//     let message = `Balance for *${selectedAccount.name}*: ${ethers.utils.formatEther(await wallet.getBalance())} TBNB\n\nRecent Transactions:\n`;
-
-//     selectedAccount.transactions.slice(-5).forEach(t => {
-//         message += `To: ${t.receiverAddress} - Amount: ${t.amount} TBNB - Hash: ${t.transactionHash}\n`;
-//     });
-
-//     ctx.replyWithMarkdown(message);
-// });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// bot.command('sendTBNB1', async (ctx) => {
-//     const parts = ctx.message.text.split(' ');
-//     if (parts.length < 3) {
-//         await ctx.reply('Usage: /sendTBNB <receiver_address> <amount_in_TBNB>\nExample: /sendTBNB 0x1234... 0.1', { parse_mode: 'Markdown' });
-//         return;
-//     }
-
-//     const receiverAddress = parts[1];
-//     const amount = parts[2];
-
-//     // Validate Ethereum address format (basic validation)
-//     if (!ethers.utils.isAddress(receiverAddress)) {
-//         await ctx.reply('🚫 The receiver address is not valid. Please provide a valid Polygon (TBNB) address.');
-//         return;
-//     }
-
-//     // Validate amount
-//     if (isNaN(amount) || parseFloat(amount) <= 0) {
-//         await ctx.reply('🚫 The amount to send must be a positive number. Please specify a valid amount of TBNB.');
-//         return;
-//     }
-
-//     // Confirmation message with details before proceeding
-//     await ctx.reply(`You're about to send ${amount} TBNB to ${receiverAddress}.\nPlease confirm by typing /confirm`, { parse_mode: 'Markdown' });
-//     // Store or flag the transaction details for confirmation...
-// });
-
-
-
-
-
-
-// bot.on(message('text'), async (ctx) => {
-//     // Explicit usage
-//     console.log("Ctx==>", ctx.message.chat.id);
-//     console.log("Ctx==>", ctx);
-//     await ctx.telegram.sendMessage(ctx.message.chat.id, `Hello ${ctx.state.role}`)
-
-//     // Using context shortcut
-//     await ctx.reply(`Hello ${ctx.state.role}`)
-// })
-
-
-
-
-
-// Confirmation handling
-
-// bot.command('sendTBNB', async (ctx) => {
-//     const parts = ctx.message.text.split(' ');
-//     if (parts.length < 3) {
-//         ctx.reply('Usage: /sendTBNB <receiver_address> <amount>');
-//         return;
-//     }
-//     const receiverAddress = parts[1];
-//     const amount = parts[2];
-
-//     // Basic validation here...
-
-//     ctx.reply(`Confirm sending ${amount} TBNB to ${receiverAddress}`, Markup.inlineKeyboard([
-//         Markup.button.callback('Yes', 'confirm_send'),
-//         Markup.button.callback('No', 'cancel_send')
-//     ]));
-// });
-// bot.action('confirm_send', async (ctx) => {
-//     console.log("In Send TBNB");
-//     const senderPrivateKey = "0xaf4b9e03cbe3b7b3fbba4ede1e34c28bae28763c3d91e0435e2deb3b3eb2a770"; // Extremely sensitive, manage securely
-//     const wallet = new ethers.Wallet(senderPrivateKey, provider);
-//     const tx = {
-//         to: receiverAddress,
-//         value: ethers.utils.parseEther(amount),
-//         // Additional properties like gasLimit might be necessary depending on network conditions
-//     };
-
-//     try {
-//         const txResponse = await wallet.sendTransaction(tx);
-//         await ctx.reply(`Transaction successful! [${txResponse.hash}](https://mumbai.polygonscan.com/tx/${txResponse.hash})`, { parse_mode: 'MarkdownV2' });
-//     } catch (error) {
-//         console.error('Error sending TBNB:', error);
-//         await ctx.reply('Failed to send TBNB. Please check the details and try again.');
-//     }
-// });
-
-
-
-
-// bot.action('cancel_send', (ctx) => {
-//     const parts = ctx.message.text.split(' ');
-//     if (parts.length < 3) {
-//         ctx.reply('Usage: /sendTBNB <receiver_address> <amount>');
-//         return;
-//     }
-//     const receiverAddress = parts[1];
-//     const amount = parts[2];
-
-//     // Basic validation here...
-
-//     ctx.reply(`Confirm sending ${amount} TBNB to ${receiverAddress}`);
-
-//     ctx.reply('Transaction canceled.')
-// });
-
-
-
-
-
-
-
-
-
-
-
-
-// async function handleNewTransfer(senderTelegramId, receiverAddress, amount) {
-//     // Look up the sender by their Telegram ID
-//     const sender = await User.findOne({ telegramId: senderTelegramId });
-
-//     if (!sender) {
-//         throw new Error('Sender not found');
-//     }
-
-//     // Create a new transaction
-//     const newTransaction = new Transaction({
-//         sender: sender._id,
-//         receiver: receiverAddress,
-//         amount: amount,
-//     });
-
-//     await newTransaction.save();
-
-//     // Optionally, update the sender's document to include this transaction
-//     sender.transactions.push(newTransaction._id);
-//     await sender.save();
-
-//     return newTransaction;
-// }
-
-// async function updateTransactionStatus(transactionId, newStatus) {
-//     const transaction = await Transaction.findById(transactionId);
-//     if (!transaction) {
-//         throw new Error('Transaction not found');
-//     }
-
-//     transaction.status = newStatus;
-//     await transaction.save();
-// }
-
-// async function getUserTransactions(telegramId) {
-//     const user = await User.findOne({ telegramId }).populate('transactions');
-//     return user ? user.transactions : [];
-// }
-
-
-// Placeholder function for updating an account's balance
-// In a real application, this would involve verifying the deposit transaction on the blockchain
 
