@@ -3,13 +3,35 @@ import { ethers } from 'ethers';
 import axios from 'axios';
 import QRCode from 'qrcode'
 import mongoose from 'mongoose'
-// import { connectDB } from './db.js'
+import { Network, Alchemy } from 'alchemy-sdk';
 
 const bot = new Telegraf('7190257079:AAGPN69Y9q9irb4Dx6l-G4yOudDck21W97c');
-// const provider = new ethers.providers.JsonRpcProvider('https://rpc-mumbai.polygon.technology/');
-const provider = new ethers.providers.JsonRpcProvider('https://bsc-testnet-rpc.publicnode.com');
+const settings = {
+    apiKey: "ItgoVNyNoPC9rCLvlQO75I8rkwVTzvfM",
+    network: Network.ETH_MAINNET,
+};
 
-const chainData = [
+const networkUrls = {
+    ETH: 'https://eth-mainnet.g.alchemy.com/v2/ItgoVNyNoPC9rCLvlQO75I8rkwVTzvfM',
+    Polygon: 'https://polygon-mainnet.g.alchemy.com/v2/O44lXnIsUAbCIt-EYiqZYQoafQGnxJ2p',
+    Arbitrum: 'https://arb-mainnet.g.alchemy.com/v2/YOcV5NVrXdZYCgECnYtLDmhdP-dR4xal',
+    Optimism: 'https://opt-mainnet.g.alchemy.com/v2/YOUR_API_KEY',
+    Amoy: 'https://polygon-amoy.g.alchemy.com/v2/OVVlE8kx_rjDzt71O9O5wRikv9vvABPq',
+    Base: 'https://base-mainnet.g.alchemy.com/v2/bHtrXBhmAaNODnI6d7fyXogCpL-UVwkJ'
+};
+
+const alchemy = new Alchemy(settings);
+const transactionData = {
+    chainName: '',
+    senderAddr: '',
+    receiverAddr: '',
+    privateKeyOfSender: '',
+    amount: '',
+    status: '',
+    transactionHash: '',
+};
+
+const testChainData = [
     {
         name: 'Amoy',
         rpcUrl: 'https://rpc-amoy.polygon.technology/'
@@ -19,7 +41,6 @@ const chainData = [
         rpcUrl: 'https://bsc-testnet-rpc.publicnode.com'
     },
 ]
-const chainName = '';
 let testnet = true;
 
 async function connectDB() {
@@ -42,6 +63,7 @@ const transactionSchema = new mongoose.Schema({
     receiverAddress: { type: String, required: true },
     amount: { type: Number, required: true },
     transactionHash: { type: String, required: true },
+    chainName: { type: String, require: true },
     status: { type: String, default: 'pending' },
     createdAt: { type: Date, default: Date.now }
 });
@@ -65,11 +87,8 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-
-const pendingTransactions = {};
-
-const TestChainList = ['Amoy', 'BNB', 'Sepolia_Eth', 'Goerli_Eth']
-const MainChainList = ['ETH', 'BNB', 'Polygon']
+const TestChainList = ['Amoy']
+const MainChainList = ['ETH', 'Polygon', 'Arbitrum', 'Optimism', 'Base']
 
 function getMainMenu() {
     if (testnet) {
@@ -84,7 +103,7 @@ function getMainMenu() {
             ],
             [
                 Markup.button.callback(' 💰 Check Balance', 'check_balance'),
-                Markup.button.callback(' 💸 Send Token', 'send_TBNB'),
+                Markup.button.callback(' 💸 Send Token', 'send_token'),
             ],
             [
                 Markup.button.callback(' 🔗 Show all Chain ', 'allChains'),
@@ -107,7 +126,7 @@ function getMainMenu() {
             ],
             [
                 Markup.button.callback(' 💰 Check Balance', 'check_balance'),
-                Markup.button.callback(' 💸 Send Token', 'send_TBNB'),
+                Markup.button.callback(' 💸 Send Token', 'send_token'),
             ],
             [
                 Markup.button.callback(' 🔗 Show all Chain ', 'allChains'),
@@ -212,15 +231,13 @@ bot.action('allChains', async (ctx) => {
             Markup.button.callback(`${name}`, `deposit_${index}`)
         ]);
         await ctx.reply('Select an chian to deposit into:', Markup.inlineKeyboard(accountButtons));
-    }else{
+    } else {
         const accountButtons = MainChainList.map((name, index) => [
             Markup.button.callback(`${name}`, `deposit_${index}`)
         ]);
         await ctx.reply('Select an chian to deposit into:', Markup.inlineKeyboard(accountButtons));
     }
 
-
-    // Send a message with the accounts listed
 });
 
 bot.action(/^deposit_\d+$/, async (ctx) => {
@@ -234,15 +251,12 @@ bot.action(/^deposit_\d+$/, async (ctx) => {
 
     const selectedAccount = user.accounts[index];
 
-    // Generate QR Code for the selected account address
     try {
         let addr = selectedAccount.address;
         const depositQR = await QRCode.toDataURL(addr);
 
-        // First, send the QR Code as a photo
         await ctx.replyWithPhoto({ source: Buffer.from(depositQR.split(',')[1], 'base64') }, { caption: `Scan this QR code to deposit TBNB into account No. ${index + 1} -> ${selectedAccount.name}.` });
 
-        // Then, send the address as text, making it easy to copy
         await ctx.replyWithMarkdown(`To deposit into *Account No. ${index + 1} -->> ${selectedAccount.name}* , send TBNB to the following address:\n\`${selectedAccount.address}\`\n\n⚠️ Please double-check the address before sending.`);
     } catch (error) {
         console.error('Error generating QR code:', error);
@@ -253,10 +267,7 @@ bot.action(/^deposit_\d+$/, async (ctx) => {
 bot.help((ctx) => {
     ctx.reply(`Here are the commands you can use:
 - /start - Start interacting with the bot
-- /create_account - Create a new Ethereum account
-- /balance <address> - Check the balance of a specified address
-- /ethereum - Get the current price of Ethereum in USD
-- /sendTBNB <receiver_address> <amount> - Send TBNB to another account
+- /sendto <receiver_address> <amount> - Send token to another account
 - /help - Show this help message`);
 });
 
@@ -300,39 +311,28 @@ bot.action('ethereum_price', async (ctx) => {
 });
 
 
-bot.action('send_TBNB', async (ctx) => {
-    // Explanation and example of how to enter the command
-    ctx.reply('To send TBNB, please enter the command in the following format:\n/sendto [receiver_address] [amount]\n\nExample:\n/sendto 0x1234abcde... 10.5');
+
+// for Token Transactions
+
+bot.action('send_token', async (ctx) => {
+    if (testnet) {
+        const accountButtons = TestChainList.map((name, index) => [
+            Markup.button.callback(`${name}`, `selecteChain_${name}`)
+        ]);
+        await ctx.reply(`Selecte chain to do transaction in testnet :`, Markup.inlineKeyboard(accountButtons));
+    } else {
+        const accountButtons = MainChainList.map((name, index) => [
+            Markup.button.callback(`${name}`, `selecteChain_${name}`)
+        ]);
+        await ctx.reply(`Selecte chain to do transaction :`, Markup.inlineKeyboard(accountButtons));
+    }
+
 });
 
-
-
-
-
-bot.command('sendto', async (ctx) => {
-    const parts = ctx.message.text.split(' ');
-    if (parts.length < 3) {
-        ctx.reply('Usage: /sendto [receiver_address] [amount]');
-        return;
-    }
-
-    const receiverAddress = parts[1];
-    const amount = parseFloat(parts[2]);
-
-    if (!ethers.utils.isAddress(receiverAddress) || isNaN(amount) || amount <= 0) {
-        ctx.reply('Invalid receiver address or amount. Please enter valid data.');
-        return;
-    }
-
+bot.action(/^selecteChain_\w+$/, async (ctx) => {
+    const chainName = (ctx.match[0].split('_')[1]).toString();
+    transactionData.chainName = chainName;
     try {
-        const newTransaction = new Transaction({
-            telegramId: ctx.from.id.toString(),
-            receiverAddress,
-            amount,
-            transactionHash: "not get..",
-        });
-        await newTransaction.save();
-
         ctx.reply('Transaction details saved. Please choose an account to send from.');
 
         // You can now pass the transaction ID or use another method to link to the account selection
@@ -344,7 +344,7 @@ bot.command('sendto', async (ctx) => {
         }
 
         const accountButtons = user.accounts.map((account, index) =>
-            Markup.button.callback(`${account.name}: ${account.address}`, `select_account_${index}_${newTransaction._id}`)
+            [Markup.button.callback(`${account.name}: ${account.address}`, `selectAccount_${index}`)]
         );
 
         ctx.reply('Select an account to send from:', Markup.inlineKeyboard(accountButtons));
@@ -352,38 +352,63 @@ bot.command('sendto', async (ctx) => {
         console.error('Failed to save transaction:', error);
         ctx.reply('Failed to prepare the transaction due to a server error.');
     }
-});
+})
 
-bot.action(/^select_account_(\d+)_(\w+)$/, async (ctx) => {
-    const index = parseInt(ctx.match[1]);
-    const transactionId = ctx.match[2].toString(); // Convert transactionId to string
+bot.action(/^selectAccount_(\w+)$/, async (ctx) => {
     const telegramId = ctx.from.id.toString();
-    const user = await User.findOne({ telegramId });
+    const addressIdx = (ctx.match[0].split('_')[1]).toString();
+    const user = await User.findOne({ telegramId })
+    const accountAddr = user.accounts[addressIdx].address;
+    const priKey = user.accounts[addressIdx].privateKey;
 
-    if (!user || index >= user.accounts.length) {
-        ctx.reply("Invalid account selected.");
-        return;
+    transactionData.senderAddr = accountAddr;
+    transactionData.privateKeyOfSender = priKey;
+
+    ctx.reply('To send TBNB, please enter the command in the following format:\n/sendto [receiver_address] [amount]\n\nExample:\n/sendto 0x1234abcde... 10.5');
+    console.log("Transaction data - > ", transactionData);
+})
+
+bot.command('sendto', async (ctx) => {
+    const parts = ctx.message.text.split(' ');
+    if (parts.length < 3) {
+        return ctx.reply('Usage: /sendto [receiver_address] [amount]');
     }
 
-    const selectedAccount = user.accounts[index];
+    const receiverAddress = parts[1];
+    const amount = parseFloat(parts[2]);
+    if (!ethers.utils.isAddress(receiverAddress) || isNaN(amount) || amount <= 0) {
+        return ctx.reply('Invalid receiver address or amount. Please enter valid data.');
+    }
+
+    transactionData.receiverAddr = receiverAddress;
+    transactionData.amount = amount.toString();  // Convert to string to prevent precision issues
+    transactionData.status = 'pending';
+
+    // Assuming function to prepare and confirm transaction
+    prepareAndConfirmTransaction(ctx, transactionData);
+});
+
+async function prepareAndConfirmTransaction(ctx, transaction) {
 
     try {
-        // Fetch the transaction from database
-
-        const transaction = await Transaction.findById(transactionId);
-
         if (!transaction) {
             ctx.reply("Transaction not found.");
             return;
         }
 
-        // Prepare the transaction to estimate gas
         const dummyTransaction = {
             to: transaction.receiverAddress,
             value: ethers.utils.parseEther(transaction.amount.toString()),
         };
+        const rpcUrl = networkUrls[transaction.chainName];
+        if (!rpcUrl) {
+            throw new Error('Unsupported network or network configuration missing.');
+        }
 
-        const wallet = new ethers.Wallet(selectedAccount.privateKey, provider);
+        const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+        const priKey = transaction.privateKeyOfSender;
+        console.log("TRrswf ewrfsdfvcdfv => ", transaction);
+        const wallet = new ethers.Wallet(priKey, provider);
         const estimatedGasLimit = await provider.estimateGas(dummyTransaction);
         const gasPrice = await provider.getGasPrice();
         const estimatedFee = estimatedGasLimit.mul(gasPrice);
@@ -391,239 +416,538 @@ bot.action(/^select_account_(\d+)_(\w+)$/, async (ctx) => {
 
         // Check if the balance is sufficient
         if (balance.sub(estimatedFee).lt(ethers.utils.parseEther(transaction.amount.toString()))) {
-            ctx.reply('Insufficient balance to cover the transfer amount and network fee. Transaction canceled. ❌ ');
+            ctx.reply(`estimatedFee : ${estimatedFee} and Amount : ${transaction.amount} and Balance : ${balance}
+            Insufficient balance to cover the transfer amount and network fee. Transaction canceled. ❌ `);
             return;
         }
 
         // Ask for user confirmation to proceed
-        ctx.reply(`Confirm transaction:\nSend ${transaction.amount} TBNB to ${transaction.receiverAddress}\nEstimated network fee: ${ethers.utils.formatEther(estimatedFee)} TBNB`,
+        ctx.reply(`Confirm transaction:\n- Amount: ${transaction.amount} ${transaction.chainName} Tokens\n- To: ${transaction.receiverAddr}\n- Fee: ${estimatedFee} ${transaction.chainName} Tokens\nPress 'Confirm' to proceed or 'Cancel' to abort. `,
             Markup.inlineKeyboard([
-                Markup.button.callback('Confirm Transaction', `confirm_transaction_${index}_${transactionId}`),
-                Markup.button.callback('Cancel Transaction', `cancel_transaction_${index}_${transactionId}`)
+                Markup.button.callback('Confirm Transaction', `confirm_transaction`),
+                Markup.button.callback('Cancel Transaction', `cancel_transaction`)
             ])
         );
-
     } catch (error) {
         console.error('Error preparing transaction:', error);
         ctx.reply('Failed to prepare the transaction due to an error.');
     }
+}
+
+bot.action('confirm_transaction', async (ctx) => {
+    const transaction = transactionData;
+
+    ctx.reply(`wait!! transaction is pandding... ⚠️`);
+    const result = await executeBlockchainTransaction(transaction);
+
+    if (result.success) {
+        transaction.transactionHash = result.hash;
+        transaction.status = 'confirmed';
+        ctx.reply(`Transaction confirmed! ✅ Transaction Hash: ${result.hash}`);
+    } else {
+        ctx.reply(`Transaction failed to execute: ❌ ${result.error}`);
+    }
 });
 
-bot.action(/^confirm_transaction_(\d+)_(\w+)$/, async (ctx) => {
-    const index = parseInt(ctx.match[1]);
-    const transactionId = ctx.match[2].toString();
-    const telegramId = ctx.from.id.toString();
-    const user = await User.findOne({ telegramId });
+bot.action('cancel_transaction', async (ctx) => {
+    ctx.reply('Transaction canceled.');
+});
 
-    if (!user || index >= user.accounts.length) {
-        ctx.reply("Invalid account selected.");
-        return;
-    }
-
-    const selectedAccount = user.accounts[index];
-
+async function executeBlockchainTransaction(transaction) {
     try {
-        const transaction = await Transaction.findById(transactionId);
-        console.log("tra ==> ", transaction, transactionId);
-        if (!transaction) {
-            ctx.reply("Transaction not found.");
-            return;
+        const rpcUrl = networkUrls[transaction.chainName];
+        if (!rpcUrl) {
+            throw new Error('Unsupported network or network configuration missing.');
         }
 
+        const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+
+        const wallet = new ethers.Wallet(transaction.privateKeyOfSender, provider);
+
         const tx = {
-            to: transaction.receiverAddress,
+            to: transaction.receiverAddr,
             value: ethers.utils.parseEther(transaction.amount.toString()),
         };
 
-        const wallet = new ethers.Wallet(selectedAccount.privateKey, provider);
         const txResponse = await wallet.sendTransaction(tx);
-
-        ctx.reply(`Transaction successful! ✅🥳 [${txResponse.hash}](https://testnet.bscscan.com/tx/${txResponse.hash})`, { parse_mode: 'Markdown' });
-
-
-        transaction.transactionHash = txResponse.hash;
-        transaction.status = 'confirmed';
-
-        const account = user.accounts[index];
-        account.transactions.push(transaction);
-
-        await user.save();
-
-        await transaction.save();
-
+        await txResponse.wait();
+        return { success: true, hash: txResponse.hash };
     } catch (error) {
-        console.error('Error sending transaction:', error);
-        ctx.reply('Failed to send the transaction. Please check the details and try again.');
+        console.error('Failed to execute transaction:', error);
+        return { success: false, error: error.message };
     }
-});
+}
 
 
 
 
 
-bot.action('cancel_transaction', async (ctx) => {
-    try {
-        const { userId } = ctx.match;
-        // Assuming you have the transaction ID stored somewhere
-        const transaction = await Transaction.findByIdAndDelete(userId);
-
-        if (!transaction) {
-            ctx.reply('Transaction not found.');
-            return;
-        }
-
-        ctx.reply('Transaction canceled. ❌');
-    } catch (error) {
-        console.error('Error canceling transaction:', error);
-        ctx.reply('Failed to cancel the transaction. Please try again later.');
-    }
-});
-
-
-
-bot.action('view_transactions', async (ctx) => {
-    const telegramId = ctx.from.id.toString();
-    const user = await User.findOne({ telegramId }).populate({
-        path: 'accounts',
-        populate: { path: 'transactions' }
-    });
-
-    if (!user || user.accounts.length === 0) {
-        ctx.reply("You don't have any accounts yet. Use /create_account to create one.");
-        return;
-    }
-
-    const accountButtons = user.accounts.map((account, index) => [
-        Markup.button.callback(`${account.name}: ${account.address}`, `show_transactions_${index}`)]
-    );
-
-    ctx.reply('Select an account to view transactions:', Markup.inlineKeyboard(accountButtons));
-});
-
-bot.action(/^show_transactions_\d+$/, async (ctx) => {
-    const index = parseInt(ctx.match[0].split('_')[2]);
-    const telegramId = ctx.from.id.toString();
-    const user = await User.findOne({ telegramId }).populate({
-        path: 'accounts',
-        populate: { path: 'transactions' }
-    });
-
-    if (!user || index >= user.accounts.length) {
-        ctx.reply("Invalid account selected.");
-        return;
-    }
-
-    const selectedAccount = user.accounts[index];
-    console.log("Selected ts ==> ", selectedAccount, index);
-    let message = `Confirmed Transactions for ${selectedAccount.name}:\n`;
-
-    // Filter out only the confirmed transactions
-    const confirmedTransactions = selectedAccount.transactions.filter(transaction => transaction.status === 'confirmed');
-
-    if (confirmedTransactions.length === 0) {
-        ctx.reply("No confirmed transactions found for this account.");
-        return;
-    }
-
-    confirmedTransactions.forEach(t => {
-        message += `===> To: ${t.receiverAddress} - Amount: ${t.amount} TBNB - Hash: ${t.transactionHash}\n`;
-    });
-
-    ctx.reply(message);
-});
-
-
-
-
-bot.action(/^cancel_send_(\d+)$/, (ctx) => {
-    const userId = ctx.match[1];
-    delete pendingTransactions[userId]; // Clean up the stored transaction data
-    ctx.reply('Transaction canceled. ❌ ');
-});
-
-
-
+// for balance chack
 
 bot.action('check_balance', async (ctx) => {
+
+    if (testnet) {
+        const accountButtons = TestChainList.map((name, index) => [
+            Markup.button.callback(`${name}`, `balance_${name}`)
+        ]);
+        await ctx.reply(`Selecte chain for show balance :`, Markup.inlineKeyboard(accountButtons));
+    } else {
+        const accountButtons = MainChainList.map((name, index) => [
+            Markup.button.callback(`${name}`, `balance_${name}`)
+        ]);
+        await ctx.reply(`Selecte chain for show balance :`, Markup.inlineKeyboard(accountButtons));
+    }
+
+
+});
+
+bot.action(/^balance_\w+$/, async (ctx) => {
+    const chainName = (ctx.match[0].split('_')[1]).toString();
     const telegramId = ctx.from.id.toString();
 
+
     const user = await User.findOne({ telegramId });
+    console.log("user  = ", user.username, " chianName = ", chainName);
     if (!user || user.accounts.length === 0) {
         await ctx.reply("You don't have any accounts yet. Use /create_account to create one.");
         return;
     }
-
-    // Generate inline keyboard buttons for each account
     const accountButtons = user.accounts.map((account, index) => [
-        Markup.button.callback(`${account.name} - ${account.address}`, `balance_${index}`)
+        Markup.button.callback(`${account.name} - ${account.address}`, `showBalance_${index}_${chainName}`)
     ]);
 
-    // Send a message with the accounts listed
-    await ctx.reply('Select an account to check the balance:', Markup.inlineKeyboard(accountButtons));
+    await ctx.replyWithMarkdown(`Select an account to check the balance for *${chainName} chain* :`, Markup.inlineKeyboard(accountButtons));
+
 });
 
-bot.action(/^balance_\d+$/, async (ctx) => {
-    // const index = parseInt(ctx.match[0].split('_')[1]);
-    // const telegramId = ctx.from.id.toString();
-
-    // const user = await User.findOne({ telegramId });
-    // if (!user || index >= user.accounts.length) {
-    //     await ctx.reply("Invalid account selected.");
-    //     return;
-    // }
-
-    // const selectedAccount = user.accounts[index];
-    // const addr = selectedAccount.address;
-
-    // if (testnet) {
-    //     const accountButtons = TestChainList.map((name, index) => [
-    //         Markup.button.callback(`${name}`, `showBalance_${name}_${selectedAccount}`)
-    //     ]);
-    //     await ctx.reply(`Account  ${selectedAccount.name} :`, Markup.inlineKeyboard(accountButtons));
-    // }else{
-    //     const accountButtons = MainChainList.map((name, index) => [
-    //         Markup.button.callback(`${name}`, `showBalance_${name}_${selectedAccount}`)
-    //     ]);
-    //     await ctx.reply(`Account  ${selectedAccount.name} :`, Markup.inlineKeyboard(accountButtons));
-    // }
-
-    // console.log("Selectred account ==> ", selectedAccount.address);
-    // console.log("Selectred account ==> ", selectedAccount.privateKey);
-    // const senderPrivateKey = selectedAccount.privateKey;
-    // const wallet = new ethers.Wallet(senderPrivateKey, provider);
-
-    // const balance = await wallet.getBalance();
-    // const bal = ethers.utils.formatEther(balance)
-
-    // await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}*:\n${bal} TBNB`);
-});
-
-bot.action(/^showBalance_(\d+)_()$/, async (ctx) => {
-    const chainName = (ctx.match[0].split('_')[1]).toString();
-    const accountAddress = (ctx.match[0].split('_')[2]).toString();
+bot.action(/^showBalance_(\d+)_(\w+)$/, async (ctx) => {
+    const accountIdx = ctx.match[1];
+    const chainName = ctx.match[2];
     const telegramId = ctx.from.id.toString();
-
     const user = await User.findOne({ telegramId });
-    if (!user || index >= user.accounts.length) {
+
+    if (!user || accountIdx >= user.accounts.length) {
         await ctx.reply("Invalid account selected.");
         return;
     }
 
-    const addr = accountAddress.address;
-    console.log("Selectred account ==> ", selectedAccount.address);
-    console.log("Selectred account ==> ", selectedAccount.privateKey);
-    const senderPrivateKey = selectedAccount.privateKey;
-    const wallet = new ethers.Wallet(senderPrivateKey, provider);
+    const selectedAccount = user.accounts[accountIdx];
+    const account = selectedAccount.address;
 
-    const balance = await wallet.getBalance();
-    const bal = ethers.utils.formatEther(balance)
+    if (testnet) {
+        const chainData = testChainData.find(chain => chain.name === chainName);
+        if (!chainData) {
+            await ctx.reply("Chain not supported.");
+            return;
+        }
 
-    await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}*:\n${bal} TBNB`);
+        const rpcUrl = chainData.rpcUrl;
+        console.log("chain Name:", chainName, "RPC URL:", rpcUrl, "Selected Account:", selectedAccount.name);
+
+        try {
+            switch (chainName) {
+                case 'Amoy':
+                    alchemy.config.network = Network.MATIC_AMOY;
+                    break;
+                default:
+                    await ctx.reply("Unsupported network.");
+                    return;
+            }
+
+            try {
+                const etherBalance = await alchemy.core.getBalance(account);
+                const formattedEtherBalance = ethers.utils.formatEther(etherBalance);
+                await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}* on ${chainName}:\n${formattedEtherBalance} ${chainName} Tokens`);
+            } catch (error) {
+                console.error("Error fetching balances: ", error);
+                await ctx.reply("Failed to fetch balances.");
+            }
+
+        } catch (error) {
+            console.error("Error fetching balances: ", error);
+            await ctx.reply("Failed to fetch balances.");
+        }
+
+
+
+    } else {
+        try {
+            switch (chainName) {
+                case 'ETH':
+                    alchemy.config.network = Network.ETH_MAINNET;
+                    break;
+                case 'Polygon':
+                    alchemy.config.network = Network.MATIC_MAINNET;
+                    break;
+                case 'Arbitrum':
+                    alchemy.config.network = Network.ARB_MAINNET;
+                    break;
+                case 'Optimism':
+                    alchemy.config.network = Network.OPT_MAINNET;
+                    break;
+                case 'Base':
+                    alchemy.config.network = Network.BASE_MAINNET;
+                    break;
+                default:
+                    await ctx.reply("Unsupported network.");
+                    return;
+            }
+
+            try {
+                const etherBalance = await alchemy.core.getBalance(account);
+                const formattedEtherBalance = ethers.utils.formatEther(etherBalance);
+                await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}* on ${chainName}:\n${formattedEtherBalance} ${chainName} Tokens`);
+            } catch (error) {
+                console.error("Error fetching balances: ", error);
+                await ctx.reply("Failed to fetch balances.");
+            }
+
+        } catch (error) {
+            console.error("Error fetching balances: ", error);
+            await ctx.reply("Failed to fetch balances.");
+        }
+    }
 });
-
 
 
 
 bot.launch()
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// bot.action('send_token', async (ctx) => {
+//     if (testnet) {
+//         const accountButtons = TestChainList.map((name, index) => [
+//             Markup.button.callback(`${name}`, `selecteChain_${name}`)
+//         ]);
+//         await ctx.reply(`Selecte chain to do transaction in testnet :`, Markup.inlineKeyboard(accountButtons));
+//     } else {
+//         const accountButtons = MainChainList.map((name, index) => [
+//             Markup.button.callback(`${name}`, `selecteChain_${name}`)
+//         ]);
+//         await ctx.reply(`Selecte chain to do transaction :`, Markup.inlineKeyboard(accountButtons));
+//     }
+
+//     ctx.reply('To send TBNB, please enter the command in the following format:\n/sendto [receiver_address] [amount]\n\nExample:\n/sendto 0x1234abcde... 10.5');
+// });
+
+// bot.action(/^selecteChain_\w+$/, async (ctx) => {
+//     const chainName = (ctx.match[0].split('_')[1]).toString();
+//     // transactionData.chainName = ''
+//     // transactionData.senderAddr = ''
+//     // transactionData.resceiverAddr = ''
+//     // transactionData.privateKeyOfSender = ''
+//     // transactionData.amount = ''
+//     // transactionData.status = ''
+//     // transactionData.transactionHash = ''
+
+//     transactionData.chainName = chainName;
+//     try {
+//         ctx.reply('Transaction details saved. Please choose an account to send from.');
+
+//         // You can now pass the transaction ID or use another method to link to the account selection
+//         const user = await User.findOne({ telegramId: ctx.from.id.toString() });
+
+//         if (!user || user.accounts.length === 0) {
+//             ctx.reply("You don't have any accounts yet. Use /create_account to create one.");
+//             return;
+//         }
+
+//         const accountButtons = user.accounts.map((account, index) =>
+//             [Markup.button.callback(`${account.name}: ${account.address}`, `selectAccount_${index}`)]
+//         );
+
+//         ctx.reply('Select an account to send from:', Markup.inlineKeyboard(accountButtons));
+//     } catch (error) {
+//         console.error('Failed to save transaction:', error);
+//         ctx.reply('Failed to prepare the transaction due to a server error.');
+//     }
+// })
+
+// bot.action(/^selectAccount_(\w+)$/, async (ctx) => {
+//     const telegramId = ctx.from.id.toString();
+//     const addressIdx = (ctx.match[0].split('_')[1]).toString();
+//     const user = await User.findOne({ telegramId })
+//     const accountAddr = user.accounts[addressIdx].address;
+//     const priKey = user.accounts[addressIdx].privateKey;
+
+//     transactionData.senderAddr = accountAddr;
+//     transactionData.privateKeyOfSender = priKey;
+
+//     console.log("Transaction data - > ", transactionData);
+// })
+
+// bot.command('sendto', async (ctx) => {
+//     const parts = ctx.message.text.split(' ');
+//     if (parts.length < 3) {
+//         ctx.reply('Usage: /sendto [receiver_address] [amount]');
+//         return;
+//     }
+
+//     const receiverAddress = parts[1];
+//     const amount = parseFloat(parts[2]);
+
+//     if (!ethers.utils.isAddress(receiverAddress) || isNaN(amount) || amount <= 0) {
+//         ctx.reply('Invalid receiver address or amount. Please enter valid data.');
+//         return;
+//     }
+
+//     try {
+//         const newTransaction = new Transaction({
+//             telegramId: ctx.from.id.toString(),
+//             receiverAddress,
+//             amount,
+//             transactionHash: "not get..",
+//         });
+//         await newTransaction.save();
+
+//         ctx.reply('Transaction details saved. Please choose an account to send from.');
+
+//         // You can now pass the transaction ID or use another method to link to the account selection
+//         const user = await User.findOne({ telegramId: ctx.from.id.toString() });
+
+//         if (!user || user.accounts.length === 0) {
+//             ctx.reply("You don't have any accounts yet. Use /create_account to create one.");
+//             return;
+//         }
+
+//         const accountButtons = user.accounts.map((account, index) =>
+//             [Markup.button.callback(`${account.name}: ${account.address}`, `select_account_${index}_${newTransaction._id}`)]
+//         );
+
+//         ctx.reply('Select an account to send from:', Markup.inlineKeyboard(accountButtons));
+//     } catch (error) {
+//         console.error('Failed to save transaction:', error);
+//         ctx.reply('Failed to prepare the transaction due to a server error.');
+//     }
+// });
+
+// bot.action(/^select_account_(\d+)_(\w+)$/, async (ctx) => {
+//     const index = parseInt(ctx.match[1]);
+//     const transactionId = ctx.match[2].toString(); // Convert transactionId to string
+//     const telegramId = ctx.from.id.toString();
+//     const user = await User.findOne({ telegramId });
+
+//     if (!user || index >= user.accounts.length) {
+//         ctx.reply("Invalid account selected.");
+//         return;
+//     }
+
+//     const selectedAccount = user.accounts[index];
+
+//     try {
+//         const transaction = await Transaction.findById(transactionId);
+
+//         if (!transaction) {
+//             ctx.reply("Transaction not found.");
+//             return;
+//         }
+
+//         const dummyTransaction = {
+//             to: transaction.receiverAddress,
+//             value: ethers.utils.parseEther(transaction.amount.toString()),
+//         };
+
+//         const wallet = new ethers.Wallet(selectedAccount.privateKey, provider);
+//         const estimatedGasLimit = await provider.estimateGas(dummyTransaction);
+//         const gasPrice = await provider.getGasPrice();
+//         const estimatedFee = estimatedGasLimit.mul(gasPrice);
+//         const balance = await wallet.getBalance();
+
+//         // Check if the balance is sufficient
+//         if (balance.sub(estimatedFee).lt(ethers.utils.parseEther(transaction.amount.toString()))) {
+//             ctx.reply('Insufficient balance to cover the transfer amount and network fee. Transaction canceled. ❌ ');
+//             return;
+//         }
+
+//         // Ask for user confirmation to proceed
+//         ctx.reply(`Confirm transaction:\nSend ${transaction.amount} TBNB to ${transaction.receiverAddress}\nEstimated network fee: ${ethers.utils.formatEther(estimatedFee)} TBNB`,
+//             Markup.inlineKeyboard([
+//                 Markup.button.callback('Confirm Transaction', `confirm_transaction_${index}_${transactionId}`),
+//                 Markup.button.callback('Cancel Transaction', `cancel_transaction_${index}_${transactionId}`)
+//             ])
+//         );
+
+//     } catch (error) {
+//         console.error('Error preparing transaction:', error);
+//         ctx.reply('Failed to prepare the transaction due to an error.');
+//     }
+// });
+
+// bot.action(/^confirm_transaction_(\d+)_(\w+)$/, async (ctx) => {
+//     const index = parseInt(ctx.match[1]);
+//     const transactionId = ctx.match[2].toString();
+//     const telegramId = ctx.from.id.toString();
+//     const user = await User.findOne({ telegramId });
+
+//     if (!user || index >= user.accounts.length) {
+//         ctx.reply("Invalid account selected.");
+//         return;
+//     }
+
+//     const selectedAccount = user.accounts[index];
+
+//     try {
+//         const transaction = await Transaction.findById(transactionId);
+//         console.log("tra ==> ", transaction, transactionId);
+//         if (!transaction) {
+//             ctx.reply("Transaction not found.");
+//             return;
+//         }
+
+//         const tx = {
+//             to: transaction.receiverAddress,
+//             value: ethers.utils.parseEther(transaction.amount.toString()),
+//         };
+
+//         const wallet = new ethers.Wallet(selectedAccount.privateKey, provider);
+//         const txResponse = await wallet.sendTransaction(tx);
+
+//         ctx.reply(`Transaction successful! ✅🥳 [${txResponse.hash}](https://testnet.bscscan.com/tx/${txResponse.hash})`, { parse_mode: 'Markdown' });
+
+
+//         transaction.transactionHash = txResponse.hash;
+//         transaction.status = 'confirmed';
+
+//         const account = user.accounts[index];
+//         account.transactions.push(transaction);
+
+//         await user.save();
+
+//         await transaction.save();
+
+//     } catch (error) {
+//         console.error('Error sending transaction:', error);
+//         ctx.reply('Failed to send the transaction. Please check the details and try again.');
+//     }
+// });
+
+// bot.action('cancel_transaction', async (ctx) => {
+//     try {
+//         const { userId } = ctx.match;
+//         // Assuming you have the transaction ID stored somewhere
+//         const transaction = await Transaction.findByIdAndDelete(userId);
+
+//         if (!transaction) {
+//             ctx.reply('Transaction not found.');
+//             return;
+//         }
+
+//         ctx.reply('Transaction canceled. ❌');
+//     } catch (error) {
+//         console.error('Error canceling transaction:', error);
+//         ctx.reply('Failed to cancel the transaction. Please try again later.');
+//     }
+// });
+
+// bot.action('view_transactions', async (ctx) => {
+//     const telegramId = ctx.from.id.toString();
+//     const user = await User.findOne({ telegramId }).populate({
+//         path: 'accounts',
+//         populate: { path: 'transactions' }
+//     });
+
+//     if (!user || user.accounts.length === 0) {
+//         ctx.reply("You don't have any accounts yet. Use /create_account to create one.");
+//         return;
+//     }
+
+//     const accountButtons = user.accounts.map((account, index) => [
+//         Markup.button.callback(`${account.name}: ${account.address}`, `show_transactions_${index}`)]
+//     );
+
+//     ctx.reply('Select an account to view transactions:', Markup.inlineKeyboard(accountButtons));
+// });
+
+// bot.action(/^show_transactions_\d+$/, async (ctx) => {
+//     const index = parseInt(ctx.match[0].split('_')[2]);
+//     const telegramId = ctx.from.id.toString();
+//     const user = await User.findOne({ telegramId }).populate({
+//         path: 'accounts',
+//         populate: { path: 'transactions' }
+//     });
+
+//     if (!user || index >= user.accounts.length) {
+//         ctx.reply("Invalid account selected.");
+//         return;
+//     }
+
+//     const selectedAccount = user.accounts[index];
+//     console.log("Selected ts ==> ", selectedAccount, index);
+//     let message = `Confirmed Transactions for ${selectedAccount.name}:\n`;
+
+//     // Filter out only the confirmed transactions
+//     const confirmedTransactions = selectedAccount.transactions.filter(transaction => transaction.status === 'confirmed');
+
+//     if (confirmedTransactions.length === 0) {
+//         ctx.reply("No confirmed transactions found for this account.");
+//         return;
+//     }
+
+//     confirmedTransactions.forEach(t => {
+//         message += `===> To: ${t.receiverAddress} - Amount: ${t.amount} TBNB - Hash: ${t.transactionHash}\n`;
+//     });
+
+//     ctx.reply(message);
+// });
+
+// bot.action(/^cancel_send_(\d+)$/, (ctx) => {
+//     const userId = ctx.match[1];
+//     delete pendingTransactions[userId]; // Clean up the stored transaction data
+//     ctx.reply('Transaction canceled. ❌ ');
+// });
+
+
+
+
+
+// if (transaction.chainName === 'Solana') {
+//     const { Connection, PublicKey, Transaction: SolanaTransaction, SystemProgram, sendAndConfirmTransaction } = require('@solana/web3.js');
+
+//     const connection = new Connection(process.env.SOLANA_RPC_URL);
+//     const senderPublicKey = new PublicKey(transaction.senderAddr);
+//     const receiverPublicKey = new PublicKey(transaction.receiverAddress);
+//     const signer = {
+//         publicKey: senderPublicKey,
+//         secretKey: new Uint8Array(JSON.parse(transaction.privateKeyOfSender)), // Assuming the private key is stored securely and serialized
+//     };
+
+//     const solanaTx = new SolanaTransaction().add(
+//         SystemProgram.transfer({
+//             fromPubkey: senderPublicKey,
+//             toPubkey: receiverPublicKey,
+//             lamports: SolanaTransaction.lamportsPerSol * parseFloat(transaction.amount), // Convert SOL to lamports
+//         })
+//     );
+
+//     try {
+//         const signature = await sendAndConfirmTransaction(connection, solanaTx, [signer]);
+//         return { success: true, hash: signature };
+//     } catch (error) {
+//         console.error('Failed to execute Solana transaction:', error);
+//         return { success: false, error: error.message };
+//     }
+// }
