@@ -2,18 +2,8 @@ tele Token : 7190257079:AAGPN69Y9q9irb4Dx6l-G4yOudDck21W97c
 
  Address: 0x16a1E29e90eB7c01B03b1c2a85C6d1edC0095745, Private Key: 0xaf4b9e03cbe3b7b3fbba4ede1e34c28bae28763c3d91e0435e2deb3b3eb2a770
 
+cipherPurse
 
 
-
-bot.action('deposit', async (ctx) => {
-    try {
-        const depositQR = await QRCode.toDataURL(depositAddress);
-        await ctx.replyWithPhoto({ source: Buffer.from(depositQR.split(',')[1], 'base64') },
-            { caption: 'Scan this QR code to deposit MATIC. Please make sure to double-check the address before sending:\n' + depositAddress });
-
-            listenForDeposits(depositAddress)
-    } catch (error) {
-        console.error('Error generating deposit QR code:', error);
-        await ctx.reply('Failed to generate deposit QR code. Please try again later.');
-    }
-});
+Administrator
+6q6AmNKFvLpMHAfMEWHqd2ZLN7O!iMfo

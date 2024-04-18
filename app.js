@@ -4,10 +4,13 @@ import axios from 'axios';
 import QRCode from 'qrcode'
 import mongoose from 'mongoose'
 import { Network, Alchemy } from 'alchemy-sdk';
+import dotenv from 'dotenv'
+dotenv.config();
 
-const bot = new Telegraf('7190257079:AAGPN69Y9q9irb4Dx6l-G4yOudDck21W97c');
+// console.log("Token --> " , botToken);
+const bot = new Telegraf(process.env.TELEGRAF_TOKEN);
 const settings = {
-    apiKey: "ItgoVNyNoPC9rCLvlQO75I8rkwVTzvfM",
+    apiKey: process.env.ALCHAMY_API,
     network: Network.ETH_MAINNET,
 };
 
@@ -45,7 +48,7 @@ let testnet = true;
 
 async function connectDB() {
     try {
-        await mongoose.connect('mongodb+srv://cryptoWallet:Harsh%40CW@cluster0.y5gcbd1.mongodb.net/walletDB', {
+        await mongoose.connect(process.env.MONGO_URL, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         });
@@ -165,28 +168,20 @@ bot.start(async (ctx) => {
 
 bot.action('mainetOn', async (ctx) => {
     testnet = false;
-
-    // Delete the previous message
     try {
         await ctx.deleteMessage(ctx.callbackQuery.message.message_id);
     } catch (error) {
         console.error('Error deleting message:', error);
     }
-
-    // Send the updated main menu
     ctx.reply(' ⚠️ Mainnet activated.', getMainMenu(testnet));
 });
 bot.action('testnetOn', async (ctx) => {
     testnet = true;
-
-    // Delete the previous message
     try {
         await ctx.deleteMessage(ctx.callbackQuery.message.message_id);
     } catch (error) {
         console.error('Error deleting message:', error);
     }
-
-    // Send the updated main menu
     ctx.reply(' ✅ Testnet activated.', getMainMenu(testnet));
 });
 
@@ -196,12 +191,10 @@ bot.action('testnets', async (ctx) => {
         return;
     }
 
-    // Generate inline keyboard buttons for each account
     const accountButtons = ChainList.map((name, index) => [
         Markup.button.callback(`${name}`, `deposit_${index}`)
     ]);
 
-    // Send a message with the accounts listed
     await ctx.reply('Select chain to deposit into:', Markup.inlineKeyboard(accountButtons));
 });
 
@@ -213,13 +206,9 @@ bot.action('deposit', async (ctx) => {
         await ctx.reply("You haven't created any accounts yet. Use /create_account to create one.");
         return;
     }
-
-    // Generate inline keyboard buttons for each account
-    const accountButtons = user.accounts.map((account, index) => [
+   const accountButtons = user.accounts.map((account, index) => [
         Markup.button.callback(`${account.name}: ${account.address}`, `deposit_${index}`)
     ]);
-
-    // Send a message with the accounts listed
     await ctx.reply('Select an account to deposit into:', Markup.inlineKeyboard(accountButtons));
 });
 
@@ -381,10 +370,9 @@ bot.command('sendto', async (ctx) => {
     }
 
     transactionData.receiverAddr = receiverAddress;
-    transactionData.amount = amount.toString();  // Convert to string to prevent precision issues
+    transactionData.amount = amount.toString();  
     transactionData.status = 'pending';
 
-    // Assuming function to prepare and confirm transaction
     prepareAndConfirmTransaction(ctx, transactionData);
 });
 
@@ -414,14 +402,12 @@ async function prepareAndConfirmTransaction(ctx, transaction) {
         const estimatedFee = estimatedGasLimit.mul(gasPrice);
         const balance = await wallet.getBalance();
 
-        // Check if the balance is sufficient
         if (balance.sub(estimatedFee).lt(ethers.utils.parseEther(transaction.amount.toString()))) {
             ctx.reply(`estimatedFee : ${estimatedFee} and Amount : ${transaction.amount} and Balance : ${balance}
             Insufficient balance to cover the transfer amount and network fee. Transaction canceled. ❌ `);
             return;
         }
 
-        // Ask for user confirmation to proceed
         ctx.reply(`Confirm transaction:\n- Amount: ${transaction.amount} ${transaction.chainName} Tokens\n- To: ${transaction.receiverAddr}\n- Fee: ${estimatedFee} ${transaction.chainName} Tokens\nPress 'Confirm' to proceed or 'Cancel' to abort. `,
             Markup.inlineKeyboard([
                 Markup.button.callback('Confirm Transaction', `confirm_transaction`),
@@ -608,8 +594,6 @@ bot.action(/^showBalance_(\d+)_(\w+)$/, async (ctx) => {
         }
     }
 });
-
-
 
 bot.launch()
 
