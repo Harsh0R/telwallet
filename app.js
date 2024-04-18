@@ -7,7 +7,6 @@ import { Network, Alchemy } from 'alchemy-sdk';
 import dotenv from 'dotenv'
 dotenv.config();
 
-// console.log("Token --> " , botToken);
 const bot = new Telegraf(process.env.TELEGRAF_TOKEN);
 const settings = {
     apiKey: process.env.ALCHAMY_API,
@@ -63,6 +62,7 @@ connectDB();
 
 const transactionSchema = new mongoose.Schema({
     telegramId: { type: String, required: true },
+    senderAddress: { type: String, required: true },
     receiverAddress: { type: String, required: true },
     amount: { type: Number, required: true },
     transactionHash: { type: String, required: true },
@@ -114,7 +114,7 @@ function getMainMenu() {
             ],
             [
                 Markup.button.callback(' 📝 View Transactions', 'view_transactions'),
-                Markup.button.callback(' ⚙️ Setting', 'setting'),
+                Markup.button.callback(' 💫 All Network', 'all_network'),
             ],
         ]);
     } else {
@@ -137,7 +137,7 @@ function getMainMenu() {
             ],
             [
                 Markup.button.callback(' 📝 View Transactions', 'view_transactions'),
-                Markup.button.callback(' ⚙️ Setting', 'setting'),
+                Markup.button.callback(' 💫 All Network', 'all_network'),
             ],
         ]);
 
@@ -148,7 +148,6 @@ bot.start(async (ctx) => {
     try {
         const telegramId = ctx.from.id.toString();
         const username = ctx.from.username;
-
         // Check if the user already exists
         const userExists = await User.findOne({ telegramId });
         if (!userExists) {
@@ -206,7 +205,7 @@ bot.action('deposit', async (ctx) => {
         await ctx.reply("You haven't created any accounts yet. Use /create_account to create one.");
         return;
     }
-   const accountButtons = user.accounts.map((account, index) => [
+    const accountButtons = user.accounts.map((account, index) => [
         Markup.button.callback(`${account.name}: ${account.address}`, `deposit_${index}`)
     ]);
     await ctx.reply('Select an account to deposit into:', Markup.inlineKeyboard(accountButtons));
@@ -217,12 +216,12 @@ bot.action('allChains', async (ctx) => {
 
     if (testnet) {
         const accountButtons = TestChainList.map((name, index) => [
-            Markup.button.callback(`${name}`, `deposit_${index}`)
+            Markup.button.callback(`${name}`, `network_${index}`)
         ]);
         await ctx.reply('Select an chian to deposit into:', Markup.inlineKeyboard(accountButtons));
     } else {
         const accountButtons = MainChainList.map((name, index) => [
-            Markup.button.callback(`${name}`, `deposit_${index}`)
+            Markup.button.callback(`${name}`, `network_${index}`)
         ]);
         await ctx.reply('Select an chian to deposit into:', Markup.inlineKeyboard(accountButtons));
     }
@@ -280,7 +279,6 @@ bot.action('create_account', async (ctx) => {
     const privateKey = wallet.privateKey;
     // const accountName = generateFunnyName();
     const accountName = `Account${((user.accounts).length) + 1}`;
-    console.log("Acc Name ==> ", accountName);
     user.accounts.push({ name: accountName, address, privateKey });
     await user.save();
 
@@ -296,7 +294,7 @@ bot.action('create_account', async (ctx) => {
 bot.action('ethereum_price', async (ctx) => {
     const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
     const rate = response.data.ethereum.usd;
-    ctx.reply(`Hello, today the Ethereum price is ${rate} USD`);
+    ctx.reply(`Hello 👋, today the Ethereum price is ${rate} USD`);
 });
 
 
@@ -322,7 +320,7 @@ bot.action(/^selecteChain_\w+$/, async (ctx) => {
     const chainName = (ctx.match[0].split('_')[1]).toString();
     transactionData.chainName = chainName;
     try {
-        ctx.reply('Transaction details saved. Please choose an account to send from.');
+        // ctx.reply('Transaction details saved. Please choose an account to send from.');
 
         // You can now pass the transaction ID or use another method to link to the account selection
         const user = await User.findOne({ telegramId: ctx.from.id.toString() });
@@ -354,7 +352,7 @@ bot.action(/^selectAccount_(\w+)$/, async (ctx) => {
     transactionData.privateKeyOfSender = priKey;
 
     ctx.reply('To send TBNB, please enter the command in the following format:\n/sendto [receiver_address] [amount]\n\nExample:\n/sendto 0x1234abcde... 10.5');
-    console.log("Transaction data - > ", transactionData);
+    // console.log("Transaction data - > ", transactionData);
 })
 
 bot.command('sendto', async (ctx) => {
@@ -370,7 +368,7 @@ bot.command('sendto', async (ctx) => {
     }
 
     transactionData.receiverAddr = receiverAddress;
-    transactionData.amount = amount.toString();  
+    transactionData.amount = amount.toString();
     transactionData.status = 'pending';
 
     prepareAndConfirmTransaction(ctx, transactionData);
@@ -395,7 +393,6 @@ async function prepareAndConfirmTransaction(ctx, transaction) {
 
         const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
         const priKey = transaction.privateKeyOfSender;
-        console.log("TRrswf ewrfsdfvcdfv => ", transaction);
         const wallet = new ethers.Wallet(priKey, provider);
         const estimatedGasLimit = await provider.estimateGas(dummyTransaction);
         const gasPrice = await provider.getGasPrice();
@@ -423,12 +420,29 @@ async function prepareAndConfirmTransaction(ctx, transaction) {
 bot.action('confirm_transaction', async (ctx) => {
     const transaction = transactionData;
 
-    ctx.reply(`wait!! transaction is pandding... ⚠️`);
+    ctx.reply(`please wait!! transaction is pandding... ⚠️`);
     const result = await executeBlockchainTransaction(transaction);
 
     if (result.success) {
         transaction.transactionHash = result.hash;
         transaction.status = 'confirmed';
+
+        const newTransaction = new Transaction({
+            telegramId: ctx.from.id,
+            senderAddress: transaction.senderAddr,
+            receiverAddress: transaction.receiverAddr,
+            amount: transaction.amount,
+            transactionHash: transaction.transactionHash,
+            chainName: transaction.chainName,
+            status: transaction.status
+        });
+
+        try {
+            await newTransaction.save();
+            // console.log('Transaction saved successfully:', newTransaction);
+        } catch (error) {
+            console.error('Failed to save transaction:', error);
+        }
         ctx.reply(`Transaction confirmed! ✅ Transaction Hash: ${result.hash}`);
     } else {
         ctx.reply(`Transaction failed to execute: ❌ ${result.error}`);
@@ -493,7 +507,6 @@ bot.action(/^balance_\w+$/, async (ctx) => {
 
 
     const user = await User.findOne({ telegramId });
-    console.log("user  = ", user.username, " chianName = ", chainName);
     if (!user || user.accounts.length === 0) {
         await ctx.reply("You don't have any accounts yet. Use /create_account to create one.");
         return;
@@ -528,7 +541,6 @@ bot.action(/^showBalance_(\d+)_(\w+)$/, async (ctx) => {
         }
 
         const rpcUrl = chainData.rpcUrl;
-        console.log("chain Name:", chainName, "RPC URL:", rpcUrl, "Selected Account:", selectedAccount.name);
 
         try {
             switch (chainName) {
@@ -594,6 +606,34 @@ bot.action(/^showBalance_(\d+)_(\w+)$/, async (ctx) => {
         }
     }
 });
+
+
+//transaction History
+
+bot.action('view_transactions', async (ctx) => {
+    const telegramId = ctx.from.id.toString();
+
+    // Fetch all transactions for the user from the Transaction collection
+    const transactions = await Transaction.find({ telegramId });
+    if (!transactions || transactions.length === 0) {
+        await ctx.reply("You don't have any transactions yet.");
+        return;
+    }
+
+    let message = '📜 Transaction History:\n';
+    transactions.forEach((transaction, index) => {
+        message += `${index + 1}. Amount: ${transaction.amount} ${transaction.chainName} Tokens\n`;
+        message += `   From: ${transaction.senderAddress}\n`;
+        message += `   To: ${transaction.receiverAddress}\n`;
+        message += `   Status: ${transaction.status}\n`;
+        message += `   Hash: ${transaction.transactionHash}\n`;
+        message += `   Date: ${transaction.createdAt.toDateString()}\n\n`;
+    });
+
+    // Send the constructed message
+    await ctx.replyWithMarkdown(message);
+});
+
 
 bot.launch()
 
