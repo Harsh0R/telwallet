@@ -14,12 +14,12 @@ const settings = {
 };
 
 const networkUrls = {
-    ETH: 'https://eth-mainnet.g.alchemy.com/v2/ItgoVNyNoPC9rCLvlQO75I8rkwVTzvfM',
-    Polygon: 'https://polygon-mainnet.g.alchemy.com/v2/O44lXnIsUAbCIt-EYiqZYQoafQGnxJ2p',
-    Arbitrum: 'https://arb-mainnet.g.alchemy.com/v2/YOcV5NVrXdZYCgECnYtLDmhdP-dR4xal',
-    Optimism: 'https://opt-mainnet.g.alchemy.com/v2/YOUR_API_KEY',
-    Amoy: 'https://polygon-amoy.g.alchemy.com/v2/OVVlE8kx_rjDzt71O9O5wRikv9vvABPq',
-    Base: 'https://base-mainnet.g.alchemy.com/v2/bHtrXBhmAaNODnI6d7fyXogCpL-UVwkJ'
+    ETH: process.env.ETH,
+    Polygon: process.env.POLYGON,
+    Arbitrum: process.env.ARBITRUM,
+    Optimism: process.env.OPTIMISM,
+    Amoy: process.env.AMOY,
+    Base: process.env.BASE,
 };
 
 const alchemy = new Alchemy(settings);
@@ -43,6 +43,7 @@ const testChainData = [
         rpcUrl: 'https://bsc-testnet-rpc.publicnode.com'
     },
 ]
+
 let testnet = true;
 
 async function connectDB() {
@@ -109,7 +110,7 @@ function getMainMenu() {
                 Markup.button.callback(' 💸 Send Token', 'send_token'),
             ],
             [
-                Markup.button.callback(' 🔗 Show all Chain ', 'allChains'),
+                Markup.button.callback(' 🔗 Show Account ', 'allAccount'),
                 Markup.button.callback(' 🪙 ETH Pice', 'ethereum_price'),
             ],
             [
@@ -132,7 +133,7 @@ function getMainMenu() {
                 Markup.button.callback(' 💸 Send Token', 'send_token'),
             ],
             [
-                Markup.button.callback(' 🔗 Show all Chain ', 'allChains'),
+                Markup.button.callback(' 🔗 Show Account ', 'allAccount'),
                 Markup.button.callback(' 🪙 ETH Pice', 'ethereum_price'),
             ],
             [
@@ -211,23 +212,45 @@ bot.action('deposit', async (ctx) => {
     await ctx.reply('Select an account to deposit into:', Markup.inlineKeyboard(accountButtons));
 });
 
-bot.action('allChains', async (ctx) => {
+bot.action('all_network', async (ctx) => {
     const telegramId = ctx.from.id.toString();
 
     if (testnet) {
         const accountButtons = TestChainList.map((name, index) => [
-            Markup.button.callback(`${name}`, `network_${index}`)
+            Markup.button.callback(`${name}`, `network_`)
         ]);
-        await ctx.reply('Select an chian to deposit into:', Markup.inlineKeyboard(accountButtons));
+        await ctx.reply('List of Testnet network :', Markup.inlineKeyboard(accountButtons));
     } else {
         const accountButtons = MainChainList.map((name, index) => [
-            Markup.button.callback(`${name}`, `network_${index}`)
+            Markup.button.callback(`${name}`, `network_`)
         ]);
-        await ctx.reply('Select an chian to deposit into:', Markup.inlineKeyboard(accountButtons));
+        await ctx.reply('List of Mainnet network :', Markup.inlineKeyboard(accountButtons));
     }
 
 });
 
+bot.action('allAccount', async (ctx) => {
+    const telegramId = ctx.from.id.toString();
+
+    const user = await User.findOne({ telegramId: ctx.from.id.toString() });
+
+    if (!user || user.accounts.length === 0) {
+        await ctx.reply("You don't have any accounts yet. Use /create_account to create one.");
+        return;
+    }
+
+    let messageText = "List of your all accounts:\n";
+    user.accounts.forEach((account, index) => {
+        // Display each account in a message formatted as code for easy copying
+        messageText += `\n${index + 1}. <b>${account.name}</b>: ${account.address}`;
+    });
+
+    await ctx.reply(messageText, { parse_mode: 'HTML' });
+});
+
+bot.action('network_', async (ctx) => {
+   return
+});
 bot.action(/^deposit_\d+$/, async (ctx) => {
     const index = parseInt(ctx.match[0].split('_')[1]);
     const telegramId = ctx.from.id.toString();
@@ -243,9 +266,9 @@ bot.action(/^deposit_\d+$/, async (ctx) => {
         let addr = selectedAccount.address;
         const depositQR = await QRCode.toDataURL(addr);
 
-        await ctx.replyWithPhoto({ source: Buffer.from(depositQR.split(',')[1], 'base64') }, { caption: `Scan this QR code to deposit TBNB into account No. ${index + 1} -> ${selectedAccount.name}.` });
+        await ctx.replyWithPhoto({ source: Buffer.from(depositQR.split(',')[1], 'base64') }, { caption: `Scan this QR code to deposit token into ${selectedAccount.name}.` });
 
-        await ctx.replyWithMarkdown(`To deposit into *Account No. ${index + 1} -->> ${selectedAccount.name}* , send TBNB to the following address:\n\`${selectedAccount.address}\`\n\n⚠️ Please double-check the address before sending.`);
+        await ctx.replyWithMarkdown(`To deposit into *${selectedAccount.name}* , send token to the following address:\n\`${selectedAccount.address}\`\n\n⚠️ Please double-check the address before sending.`);
     } catch (error) {
         console.error('Error generating QR code:', error);
         await ctx.reply('Failed to generate QR code. Please try again later.');
@@ -398,17 +421,20 @@ async function prepareAndConfirmTransaction(ctx, transaction) {
         const gasPrice = await provider.getGasPrice();
         const estimatedFee = estimatedGasLimit.mul(gasPrice);
         const balance = await wallet.getBalance();
+        const formattedFeeString = ethers.utils.formatUnits(estimatedFee, 'ether');
+        const formattedFee = parseFloat(formattedFeeString).toFixed(5);
+
 
         if (balance.sub(estimatedFee).lt(ethers.utils.parseEther(transaction.amount.toString()))) {
-            ctx.reply(`estimatedFee : ${estimatedFee} and Amount : ${transaction.amount} and Balance : ${balance}
+            ctx.reply(`estimatedFee : ${formattedFee} and Amount : ${transaction.amount} and Balance : ${balance}
             Insufficient balance to cover the transfer amount and network fee. Transaction canceled. ❌ `);
             return;
         }
 
-        ctx.reply(`Confirm transaction:\n- Amount: ${transaction.amount} ${transaction.chainName} Tokens\n- To: ${transaction.receiverAddr}\n- Fee: ${estimatedFee} ${transaction.chainName} Tokens\nPress 'Confirm' to proceed or 'Cancel' to abort. `,
+        ctx.reply(`Confirm transaction:\n- Amount: ${transaction.amount} ${transaction.chainName} Tokens\n- To: ${transaction.receiverAddr}\n- Fee: ${formattedFee} ${transaction.chainName} Tokens\nPress 'Confirm' to proceed or 'Cancel' to abort. `,
             Markup.inlineKeyboard([
-                Markup.button.callback('Confirm Transaction', `confirm_transaction`),
-                Markup.button.callback('Cancel Transaction', `cancel_transaction`)
+                Markup.button.callback('Confirm ✅', `confirm_transaction`),
+                Markup.button.callback('Cancel ❌', `cancel_transaction`)
             ])
         );
     } catch (error) {
@@ -420,7 +446,7 @@ async function prepareAndConfirmTransaction(ctx, transaction) {
 bot.action('confirm_transaction', async (ctx) => {
     const transaction = transactionData;
 
-    ctx.reply(`please wait!! transaction is pandding... ⚠️`);
+    ctx.reply(`Please wait, transaction is in process... ⚠️`);
     const result = await executeBlockchainTransaction(transaction);
 
     if (result.success) {
@@ -437,21 +463,37 @@ bot.action('confirm_transaction', async (ctx) => {
             status: transaction.status
         });
 
+        const explorerUrl = getExplorerUrl(transaction.chainName, transaction.transactionHash);
+
         try {
             await newTransaction.save();
-            // console.log('Transaction saved successfully:', newTransaction);
         } catch (error) {
             console.error('Failed to save transaction:', error);
+            ctx.reply(`Transaction confirmed, but failed to save in the database. ❌ Check here: ${explorerUrl}`);
+            return;
         }
-        ctx.reply(`Transaction confirmed! ✅ Transaction Hash: ${result.hash}`);
+        ctx.reply(`Transaction confirmed! ✅ Transaction Hash: ${transaction.transactionHash}\nCheck here: ${explorerUrl}`);
     } else {
         ctx.reply(`Transaction failed to execute: ❌ ${result.error}`);
     }
 });
 
+
 bot.action('cancel_transaction', async (ctx) => {
     ctx.reply('Transaction canceled.');
 });
+function getExplorerUrl(chainName, transactionHash) {
+    const explorerUrls = {
+        'ETH': `https://etherscan.io/tx/${transactionHash}`,
+        'Polygon': `https://polygonscan.com/tx/${transactionHash}`,
+        'Arbitrum': `https://arbiscan.io/tx/${transactionHash}`,
+        'Optimism': `https://optimistic.etherscan.io/tx/${transactionHash}`,
+        'Amoy': `https://oklink.com/amoy/tx/${transactionHash}`,
+        'Base': `https://base.explorer.alchemy.com/tx/${transactionHash}`,
+    };
+    return explorerUrls[chainName] || `Transaction URL not available for ${chainName}`;
+}
+
 
 async function executeBlockchainTransaction(transaction) {
     try {
@@ -497,15 +539,14 @@ bot.action('check_balance', async (ctx) => {
         ]);
         await ctx.reply(`Selecte chain for show balance :`, Markup.inlineKeyboard(accountButtons));
     }
-
-
 });
 
 bot.action(/^balance_\w+$/, async (ctx) => {
     const chainName = (ctx.match[0].split('_')[1]).toString();
     const telegramId = ctx.from.id.toString();
-
-
+    
+    await ctx.replyWithMarkdown(`Select an account to check the balance for *${chainName} chain* :`, Markup.inlineKeyboard(accountButtons));
+    
     const user = await User.findOne({ telegramId });
     if (!user || user.accounts.length === 0) {
         await ctx.reply("You don't have any accounts yet. Use /create_account to create one.");
