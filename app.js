@@ -545,7 +545,7 @@ bot.action(/^balance_\w+$/, async (ctx) => {
     const chainName = (ctx.match[0].split('_')[1]).toString();
     const telegramId = ctx.from.id.toString();
     
-    await ctx.replyWithMarkdown(`Select an account to check the balance for *${chainName} chain* :`, Markup.inlineKeyboard(accountButtons));
+    // await ctx.replyWithMarkdown(`Select an account to check the balance for *${chainName} chain* :`, Markup.inlineKeyboard(accountButtons));
     
     const user = await User.findOne({ telegramId });
     if (!user || user.accounts.length === 0) {
@@ -560,91 +560,137 @@ bot.action(/^balance_\w+$/, async (ctx) => {
 
 });
 
+// bot.action(/^showBalance_(\d+)_(\w+)$/, async (ctx) => {
+//     const accountIdx = ctx.match[1];
+//     const chainName = ctx.match[2];
+//     const telegramId = ctx.from.id.toString();
+//     const user = await User.findOne({ telegramId });
+
+//     if (!user || accountIdx >= user.accounts.length) {
+//         await ctx.reply("Invalid account selected.");
+//         return;
+//     }
+
+//     const selectedAccount = user.accounts[accountIdx];
+//     const account = selectedAccount.address;
+
+//     if (testnet) {
+//         const chainData = testChainData.find(chain => chain.name === chainName);
+//         if (!chainData) {
+//             await ctx.reply("Chain not supported.");
+//             return;
+//         }
+
+//         const rpcUrl = chainData.rpcUrl;
+
+//         try {
+//             console.log("CHian anme ===> " , chainName);
+//             switch (chainName) {
+//                 case 'Amoy':
+//                     alchemy.config.network = Network.MATIC_AMOY;
+//                     break;
+//                 default:
+//                     await ctx.reply("Unsupported network.");
+//                     return;
+//             }
+
+//             try {
+//                 const etherBalance = await alchemy.core.getBalance(account);
+//                 const formattedEtherBalance = ethers.utils.formatEther(etherBalance);
+//                 await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}* on ${chainName}:\n${formattedEtherBalance} ${chainName} Tokens`);
+//             } catch (error) {
+//                 console.error("Error fetching balances: ", error);
+//                 await ctx.reply("Failed to fetch balances.");
+//             }
+
+//         } catch (error) {
+//             console.error("Error fetching balances: ", error);
+//             await ctx.reply("Failed to fetch balances.");
+//         }
+
+
+
+//     } else {
+//         try {
+//             switch (chainName) {
+//                 case 'ETH':
+//                     alchemy.config.network = Network.ETH_MAINNET;
+//                     break;
+//                 case 'Polygon':
+//                     alchemy.config.network = Network.MATIC_MAINNET;
+//                     break;
+//                 case 'Arbitrum':
+//                     alchemy.config.network = Network.ARB_MAINNET;
+//                     break;
+//                 case 'Optimism':
+//                     alchemy.config.network = Network.OPT_MAINNET;
+//                     break;
+//                 case 'Base':
+//                     alchemy.config.network = Network.BASE_MAINNET;
+//                     break;
+//                 default:
+//                     await ctx.reply("Unsupported network.");
+//                     return;
+//             }
+
+//             try {
+                
+//                 const etherBalance = await alchemy.core.getBalance(account);
+//                 const formattedEtherBalance = ethers.utils.formatEther(etherBalance);
+//                 await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}* on ${chainName}:\n${formattedEtherBalance} ${chainName} Tokens`);
+//             } catch (error) {
+//                 console.error("Error fetching balances: ", error);
+//                 await ctx.reply("Failed to fetch balances.");
+//             }
+
+//         } catch (error) {
+//             console.error("Error fetching balances: ", error);
+//             await ctx.reply("Failed to fetch balances.");
+//         }
+//     }
+// });
+
+// Utility to get the correct provider based on the chain
+function getProvider(chainName) {
+    const rpcUrls = {
+        'Amoy': process.env.AMOY, // Make sure to define these in your environment or configuration
+        'ETH': process.env.ETH,
+        'Polygon': process.env.POLYGON,
+        'Arbitrum': process.env.ARBITRUM,
+        'Optimism': process.env.OPTIMISM,
+        'Base': process.env.BASE,
+    };
+
+    const rpcUrl = rpcUrls[chainName];
+    if (!rpcUrl) {
+        throw new Error(`Unsupported or undefined RPC URL for ${chainName}`);
+    }
+
+    return new ethers.providers.JsonRpcProvider(rpcUrl);
+}
+
 bot.action(/^showBalance_(\d+)_(\w+)$/, async (ctx) => {
-    const accountIdx = ctx.match[1];
+    const accountIdx = parseInt(ctx.match[1]);
     const chainName = ctx.match[2];
     const telegramId = ctx.from.id.toString();
-    const user = await User.findOne({ telegramId });
 
+    const user = await User.findOne({ telegramId });
     if (!user || accountIdx >= user.accounts.length) {
         await ctx.reply("Invalid account selected.");
         return;
     }
 
     const selectedAccount = user.accounts[accountIdx];
-    const account = selectedAccount.address;
+    const accountAddress = selectedAccount.address;
 
-    if (testnet) {
-        const chainData = testChainData.find(chain => chain.name === chainName);
-        if (!chainData) {
-            await ctx.reply("Chain not supported.");
-            return;
-        }
-
-        const rpcUrl = chainData.rpcUrl;
-
-        try {
-            switch (chainName) {
-                case 'Amoy':
-                    alchemy.config.network = Network.MATIC_AMOY;
-                    break;
-                default:
-                    await ctx.reply("Unsupported network.");
-                    return;
-            }
-
-            try {
-                const etherBalance = await alchemy.core.getBalance(account);
-                const formattedEtherBalance = ethers.utils.formatEther(etherBalance);
-                await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}* on ${chainName}:\n${formattedEtherBalance} ${chainName} Tokens`);
-            } catch (error) {
-                console.error("Error fetching balances: ", error);
-                await ctx.reply("Failed to fetch balances.");
-            }
-
-        } catch (error) {
-            console.error("Error fetching balances: ", error);
-            await ctx.reply("Failed to fetch balances.");
-        }
-
-
-
-    } else {
-        try {
-            switch (chainName) {
-                case 'ETH':
-                    alchemy.config.network = Network.ETH_MAINNET;
-                    break;
-                case 'Polygon':
-                    alchemy.config.network = Network.MATIC_MAINNET;
-                    break;
-                case 'Arbitrum':
-                    alchemy.config.network = Network.ARB_MAINNET;
-                    break;
-                case 'Optimism':
-                    alchemy.config.network = Network.OPT_MAINNET;
-                    break;
-                case 'Base':
-                    alchemy.config.network = Network.BASE_MAINNET;
-                    break;
-                default:
-                    await ctx.reply("Unsupported network.");
-                    return;
-            }
-
-            try {
-                const etherBalance = await alchemy.core.getBalance(account);
-                const formattedEtherBalance = ethers.utils.formatEther(etherBalance);
-                await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}* on ${chainName}:\n${formattedEtherBalance} ${chainName} Tokens`);
-            } catch (error) {
-                console.error("Error fetching balances: ", error);
-                await ctx.reply("Failed to fetch balances.");
-            }
-
-        } catch (error) {
-            console.error("Error fetching balances: ", error);
-            await ctx.reply("Failed to fetch balances.");
-        }
+    try {
+        const provider = getProvider(chainName); // Get provider dynamically based on the chain
+        const etherBalance = await provider.getBalance(accountAddress);
+        const formattedEtherBalance = ethers.utils.formatEther(etherBalance);
+        await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}* on ${chainName}:\n${formattedEtherBalance} ${chainName} Tokens`);
+    } catch (error) {
+        console.error("Error fetching balances: ", error);
+        await ctx.reply(`Failed to fetch balances: ${error.message}`);
     }
 });
 
