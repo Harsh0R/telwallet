@@ -117,6 +117,9 @@ function getMainMenu() {
                 Markup.button.callback(' 📝 View Transactions', 'view_transactions'),
                 Markup.button.callback(' 💫 All Network', 'all_network'),
             ],
+            [
+                Markup.button.callback(' 🔑 Show Privetkey', 'Show_Privetkey'),
+            ],
         ]);
     } else {
         return Markup.inlineKeyboard([
@@ -140,8 +143,11 @@ function getMainMenu() {
                 Markup.button.callback(' 📝 View Transactions', 'view_transactions'),
                 Markup.button.callback(' 💫 All Network', 'all_network'),
             ],
+            [
+                Markup.button.callback(' 🔑 Show Privetkey', 'Show_Privetkey'),
+            ],
         ]);
-
+        
     }
 }
 
@@ -524,6 +530,7 @@ async function executeBlockchainTransaction(transaction) {
 
 
 
+
 // for balance chack
 
 bot.action('check_balance', async (ctx) => {
@@ -684,7 +691,7 @@ bot.action(/^showBalance_(\d+)_(\w+)$/, async (ctx) => {
     const accountAddress = selectedAccount.address;
 
     try {
-        const provider = getProvider(chainName); // Get provider dynamically based on the chain
+        const provider = getProvider(chainName); 
         const etherBalance = await provider.getBalance(accountAddress);
         const formattedEtherBalance = ethers.utils.formatEther(etherBalance);
         await ctx.replyWithMarkdown(`Balance for *${selectedAccount.name}* on ${chainName}:\n${formattedEtherBalance} ${chainName} Tokens`);
@@ -695,8 +702,50 @@ bot.action(/^showBalance_(\d+)_(\w+)$/, async (ctx) => {
 });
 
 
-//transaction History
+//Show Privet Key
 
+bot.action('Show_Privetkey', async (ctx) => {
+    // Ensure user authentication, for example, checking if they're registered in your system
+    const telegramId = ctx.from.id.toString();
+    const user = await User.findOne({ telegramId });
+    if (!user) {
+        await ctx.reply('You are not authorized to use this feature.');
+        return;
+    }
+
+    // Prompt the user to select the account for which they want to view the private key
+    const accountButtons = user.accounts.map((account, index) => [
+        Markup.button.callback(`${account.name}: ${account.address}`, `selectAccounts_${index}`)
+    ]);
+    await ctx.reply('Select the account to view the private key:', Markup.inlineKeyboard(accountButtons));
+});
+
+bot.action(/^selectAccounts_(\d+)$/, async (ctx) => {
+    const accountIndex = parseInt(ctx.match[1]);
+    const telegramId = ctx.from.id.toString();
+    const user = await User.findOne({ telegramId });
+
+    // Validate account selection
+    if (!user || accountIndex >= user.accounts.length) {
+        await ctx.reply("Invalid account selected.");
+        return;
+    }
+
+    // Only allow the owner of the account to view the private key
+    const selectedAccount = user.accounts[accountIndex];
+    if (selectedAccount && selectedAccount.privateKey) {
+        // Here, you might want to encrypt the private key before sending it
+        await ctx.replyWithMarkdown(`Private Key for *${selectedAccount.name}*\n\`${selectedAccount.privateKey}\``);
+    } else {
+        await ctx.reply("Private key not found for the selected account.");
+    }
+});
+
+
+
+
+
+//view Transaction
 bot.action('view_transactions', async (ctx) => {
     const telegramId = ctx.from.id.toString();
 
