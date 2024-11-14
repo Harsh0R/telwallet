@@ -118,6 +118,12 @@ function getMainMenu() {
         Markup.button.callback(" 💫 All Network", "all_network"),
       ],
       [Markup.button.callback(" 🔑 Show Privetkey", "Show_Privetkey")],
+      [
+        {
+          text: "Invite Friend",
+          url: `https://t.me/share/url?url=https://t.me/@c_r_y_p_t_Bot&text=Join%20me%20on%20this%20bot!`,
+        },
+      ],
     ]);
   } else {
     return Markup.inlineKeyboard([
@@ -142,6 +148,12 @@ function getMainMenu() {
         Markup.button.callback(" 💫 All Network", "all_network"),
       ],
       [Markup.button.callback(" 🔑 Show Privetkey", "Show_Privetkey")],
+      [
+        {
+          text: "Invite Friend",
+          url: `https://t.me/share/url?url=https://t.me/@c_r_y_p_t_Bot&text=Join%20me%20on%20this%20bot!`,
+        },
+      ],
     ]);
   }
 }
@@ -576,7 +588,7 @@ async function executeBlockchainTransaction(transaction) {
     const txResponse = await wallet.sendTransaction(tx);
 
     await txResponse.wait();
-    
+
     return { success: true, hash: txResponse.hash };
   } catch (error) {
     console.error("Failed to execute transaction:", error);
@@ -698,6 +710,23 @@ bot.action("Show_Privetkey", async (ctx) => {
     Markup.inlineKeyboard(accountButtons)
   );
 });
+
+// bot.action("inFriends", async (ctx) => {
+//   const telegramId = ctx.from.id.toString();
+//   const user = await User.findOne({ telegramId });
+//   const botUsername = "@c_r_y_p_t_Bot";
+//   const inviteLink = `https://t.me/${botUsername}`;
+
+//   if (window.Telegram && window.Telegram.WebApp) {
+//     window.Telegram.WebApp.openLink(
+//       `https://t.me/share/url?url=${inviteLink}&text=Check%20out%20this%20bot!`
+//     );
+//   } else {
+//     // For non-Telegram environments, copy the link to clipboard
+//     navigator.clipboard.writeText(inviteLink);
+//     alert("Bot link copied! Share it with your friends.");
+//   }
+// });
 
 bot.action(/^selectAccounts_(\d+)$/, async (ctx) => {
   const accountIndex = parseInt(ctx.match[1]);
